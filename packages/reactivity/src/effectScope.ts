@@ -1,4 +1,5 @@
 import { ReactiveEffect } from "./effect";
+import { TriggerOpTypes } from "./operations";
 import { warn } from './warning'
 
 let activeEffectScope: EffectScope | undefined

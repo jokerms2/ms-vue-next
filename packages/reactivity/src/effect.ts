@@ -1,6 +1,6 @@
 import { TrackOpTypes, TriggerOpTypes } from "./operations";
-import { createDep, Dep, wasTracked, newTracked } from './dep'
-import { extend } from '@vue/shared'
+import { createDep, Dep, wasTracked, newTracked, finalizeDepMarkers } from './dep'
+import { extend, isArray, isMap, isIntegerKey} from '@vue/shared'
 import { EffectScope, recordEffectScope} from "./effectScope";
 
 type KeyToDepMap = Map<any, Dep>
@@ -30,6 +30,9 @@ export type DebuggerEventExtraInfo = {
 const effectStack: ReactiveEffect[] = []
 let activeEffect: ReactiveEffect | undefined
 
+export const ITERATE_KEY = Symbol(__DEV__ ? 'iterate' : '')
+export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
+
 export class ReactiveEffect<T = any> {
   active = true
   deps: Dep[] = []
@@ -38,6 +41,7 @@ export class ReactiveEffect<T = any> {
   allowRecurse?: boolean
   onStop?: () => void
   onTrack?: (event: DebuggerEvent) => void
+  onTrigger?: (event: DebuggerEvent) => void
 
   constructor(
     public fn: () => T,
@@ -67,7 +71,7 @@ export class ReactiveEffect<T = any> {
         return this.fn()
       } finally {
         if (effectTrackDepth <= maxMarkerBits) {
-          
+          finalizeDepMarkers(this)
         }
 
         trackOpBit = 1 << --effectTrackDepth
@@ -215,3 +219,102 @@ export function trackEffects(
     }
   }
 }
+
+export function trigger(
+  target: object,
+  type: TriggerOpTypes,
+  key?: unknown,
+  newValue?: unknown,
+  oldValue?: unknown,
+  oldTarget?: Map<unknown, unknown> | Set<unknown>
+) {
+  const depsMap = targetMap.get(target)
+  if (!depsMap) {
+    return
+  }
+
+  let deps: (Dep | undefined)[] = []
+  if (type === TriggerOpTypes.CLEAR) {
+    deps = [...depsMap.values()]
+  } else if (key === 'length' && isArray(target)) {
+    depsMap.forEach((dep, key) => {
+      if (key === 'length' || key >= (newValue as number)) {
+        deps.push(dep)
+      }
+    })
+  } else {
+    if (key !== void 0) {
+      deps.push(depsMap.get(key))
+    }
+
+    switch (type) {
+      case TriggerOpTypes.ADD:
+        if (!isArray(target)) {
+          deps.push(depsMap.get(ITERATE_KEY))
+          if (isMap(target)) {
+            deps.push(depsMap.get(MAP_KEY_ITERATE_KEY))
+          }
+        } else if (isIntegerKey(key)) {
+          deps.push(depsMap.get('length'))
+        }
+        break
+      case TriggerOpTypes.DELETE:
+        if (!isArray(target)) {
+          deps.push(depsMap.get(ITERATE_KEY))
+          if (isMap(target)) {
+            deps.push(depsMap.get(MAP_KEY_ITERATE_KEY))
+          }
+        }
+        break
+      case TriggerOpTypes.SET:
+        if (isMap(target)) {
+          deps.push(depsMap.get(ITERATE_KEY))
+        }
+        break
+    }
+  }
+
+  const eventInfo = __DEV__
+    ? { target, type, key, newValue, oldValue, oldTarget }
+    : undefined
+
+  if (deps.length === 1) {
+    if (deps[0]) {
+      if (__DEV__) {
+        triggerEffects(deps[0], eventInfo)
+      } else {
+        triggerEffects(deps[0])
+      }
+    }
+  } else {
+    const effects: ReactiveEffect[] = []
+    for (const dep of deps) {
+      if (dep) {
+        effects.push(...dep)
+      }
+    }
+    if (__DEV__) {
+      triggerEffects(createDep(effects), eventInfo)
+    } else {
+      triggerEffects(createDep(effects))
+    }
+  }
+ }
+
+ export function triggerEffects(
+   dep: Dep | ReactiveEffect[],
+   debuggerEventExtraInfo?: DebuggerEventExtraInfo
+ ) {
+   for (const effect of isArray(dep) ? dep: [...dep]) {
+     if (effect !== activeEffect || effect.allowRecurse) {
+       if (__DEV__ && effect.onTrigger) {
+         effect.onTrigger(extend({ effect }, debuggerEventExtraInfo))
+       }
+       if (effect.scheduler) {
+         effect.scheduler()
+       } else {
+         effect.run()
+       }
+     }
+   }
+ }
