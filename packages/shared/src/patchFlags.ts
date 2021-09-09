@@ -15,7 +15,7 @@ export const enum PatchFlags {
   BAIL = -2
 }
 
-export const PatchFlagName = {
+export const PatchFlagNames = {
   [PatchFlags.TEXT]: `TEXT`,
   [PatchFlags.CLASS]: `CLASS`,
   [PatchFlags.STYLE]: `STYLE`,

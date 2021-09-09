@@ -1,4 +1,5 @@
 import { extend, hyphenate, isObject, isString } from "@vue/shared";
+import { SlotOutletNode } from ".";
 import { BlockCodegenNode, CallExpression, createCallExpression, createObjectExpression, DirectiveNode, ElementNode, ElementTypes, ExpressionNode, IfBranchNode, InterpolationNode, JSChildNode, MemoExpression, NodeTypes, ObjectExpression, Position, Property, RenderSlotCall, RootNode, SimpleExpressionNode, SourceLocation, TemplateChildNode, TemplateNode, TextNode, VNodeCall } from "./ast";
 import { CREATE_BLOCK, CREATE_ELEMENT_BLOCK, CREATE_ELEMENT_VNODE, CREATE_VNODE, GUARD_REACTIVE_PROPS, MERGE_PROPS, NORMALIZE_PROPS, OPEN_BLOCK, TO_HANDLERS, WITH_MEMO } from "./runtimeHelpers";
 import { TransformContext } from "./transform";
@@ -95,6 +96,12 @@ export function isTemplateNode(
   return (
     node.type === NodeTypes.ELEMENT && node.tagType === ElementTypes.TEMPLATE
   )
+}
+
+export function isSlotOutlet(
+  node: RootNode | TemplateChildNode
+): node is SlotOutletNode {
+  return node.type === NodeTypes.ELEMENT && node.tagType === ElementTypes.SLOT
 }
 
 const nonIdentifierRE = /^\d|[^\$\w]/

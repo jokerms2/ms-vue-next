@@ -22,10 +22,11 @@ import {
 } from './ast'
 
 import { CompilerCompatOptions } from './compat/compatConfig'
-import { camelize, capitalize, EMPTY_OBJ, isArray, isString, NOOP } from '@vue/shared'
+import { camelize, capitalize, EMPTY_OBJ, isArray, isString, NOOP, PatchFlagNames, PatchFlags} from '@vue/shared'
 import { defaultOnError, defaultOnWarn } from './errors'
-import { CREATE_COMMENT, helperNameMap, TO_DISPLAY_STRING } from './runtimeHelpers'
-import { isVSlot } from './utils'
+import { CREATE_COMMENT, FRAGMENT, helperNameMap, TO_DISPLAY_STRING } from './runtimeHelpers'
+import { isVSlot, makeBlock } from './utils'
+import { hoistStatic, isSingleElementRoot } from './transforms/hoistStatic'
 
 export type NodeTransform = (
   node: RootNode | TemplateChildNode,
@@ -386,5 +387,69 @@ export function traverseNode(
   let i = exitFns.length
   while (i--) {
     exitFns[i]()
+  }
+}
+
+
+export function transform(root: RootNode, options: TransformOptions) {
+  const context = createTransformContext(root, options)
+  traverseNode(root, context)
+  if (options.hoistStatic) {
+    hoistStatic(root, context)
+  }
+  if (!options.ssr) {
+    createRootCodegen(root, context)
+  }
+  root.helpers = [...context.helpers.keys()]
+  root.components = [...context.components]
+  root.directives = [...context.directives]
+  root.imports = context.imports
+  root.hoists = context.hoists
+  root.temps = context.temps
+  root.cached = context.cached
+
+  if (__COMPAT__) {
+    root.filters = [...context.filters!]
+  }
+}
+
+function createRootCodegen(root: RootNode, context: TransformContext) {
+  const { helper } = context
+  const { children } = root
+  if (children.length === 1) {
+    const child = children[0]
+    if (isSingleElementRoot(root, child) && child.codegenNode) {
+      const codegenNode = child.codegenNode
+      if (codegenNode.type === NodeTypes.VNODE_CALL) {
+        makeBlock(codegenNode, context)
+      }
+      root.codegenNode = codegenNode
+    } else {
+      root.codegenNode = child
+    }
+  } else if (children.length > 1) {
+    let patchFlag = PatchFlags.STABLE_FRAGMENT
+    let patchFlagText = PatchFlagNames[PatchFlags.STABLE_FRAGMENT]
+    if (
+      __DEV__ &&
+      children.filter(c => c.type !== NodeTypes.COMMENT).length == 1
+    ) {
+      patchFlag |= PatchFlags.DEV_ROOT_FRAGMENT
+      patchFlagText += `, ${PatchFlagNames[PatchFlags.DEV_ROOT_FRAGMENT]}`
+    }
+    root.codegenNode = createVNodeCall(
+      context,
+      helper(FRAGMENT),
+      undefined,
+      root.children,
+      patchFlag + (__DEV__ ? ` /* ${patchFlagText} */` : ``),
+      undefined,
+      undefined,
+      true,
+      undefined,
+      false
+    )
+  } else {
+
   }
 }

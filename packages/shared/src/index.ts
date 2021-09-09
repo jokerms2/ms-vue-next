@@ -3,6 +3,7 @@ import { makeMap } from "./makeMap"
 export { makeMap }
 
 export * from './globalsWhitelist'
+export * from './patchFlags'
 export * from './slotFlags'
 
 export const babelParserDefaultPlugins = [

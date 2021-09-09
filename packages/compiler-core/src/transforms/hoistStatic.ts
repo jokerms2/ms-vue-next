@@ -1,9 +1,60 @@
 import { isString, isSymbol } from "@vue/shared";
-import { CallExpression, ConstantTypes, ElementTypes, JSChildNode, NodeTypes, PlainElementNode, SimpleExpressionNode, TemplateChildNode, VNodeCall } from "../ast";
+import { PatchFlags } from "packages/shared/src/patchFlags";
+import { ComponentNode, TemplateNode } from "..";
+import { CallExpression, ConstantTypes, ElementTypes, JSChildNode, NodeTypes, PlainElementNode, RootNode, SimpleExpressionNode, TemplateChildNode, VNodeCall } from "../ast";
 import { GUARD_REACTIVE_PROPS, NORMALIZE_CLASS, NORMALIZE_PROPS, NORMALIZE_STYLE, OPEN_BLOCK } from "../runtimeHelpers";
 import { TransformContext } from "../transform";
-import { getVNodeBlockHelper, getVNodeHelper } from "../utils";
+import { getVNodeBlockHelper, getVNodeHelper, isSlotOutlet } from "../utils";
 
+
+export function hoistStatic(root: RootNode, context: TransformContext) {
+
+}
+
+export function isSingleElementRoot(
+  root: RootNode,
+  child: TemplateChildNode
+): child is PlainElementNode | ComponentNode | TemplateNode {
+  const { children } = root
+  return (
+    children.length === 1 &&
+    child.type === NodeTypes.ELEMENT &&
+    !isSlotOutlet(child)
+  )
+}
+
+function walk(
+  node: ParentNode,
+  context: TransformContext,
+  doNotHoistNode: boolean = false
+) {
+  let canStringify = true
+
+  const { children } = node
+  const originalCount = children.length
+  let hoistedCount = 0
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i]
+    if (
+      child.type === NodeTypes.ELEMENT &&
+      child.tagType === ElementTypes.ELEMENT
+    ) {
+      const constantType = doNotHoistNode
+        ? ConstantTypes.NOT_CONSTANT
+        : getConstantType(child, context)
+      if (constantType > ConstantTypes.NOT_CONSTANT) {
+        if (constantType < ConstantTypes.CAN_STRINGIFY) {
+          canStringify = false
+        }
+        if (constantType >= ConstantTypes.CAN_HOIST) {
+          ;(child.codegenNode as VNodeCall).patchFlag =
+            PatchFlags.HOISTED + (__DEV__ ? ` /* HOISTED */` : ``)
+          child.codegenNode = context.hoist(child.codegenNode!)
+        }
+      }
+    }
+  }
+}
 
 export function getConstantType(
   node: TemplateChildNode | SimpleExpressionNode,
