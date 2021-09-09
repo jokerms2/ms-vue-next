@@ -400,7 +400,7 @@ export interface ReturnStatement extends Node {
   returns: TemplateChildNode | TemplateChildNode[] | JSChildNode
 }
 
-export interface DirectiveArguments extends Node {
+export interface DirectiveArguments extends ArrayExpression {
   elements: DirectiveArgumentNode[]
 }
 

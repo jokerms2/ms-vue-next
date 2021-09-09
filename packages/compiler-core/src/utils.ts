@@ -383,6 +383,13 @@ export function injectProp(
   }
 }
 
+export function toValidAssetId(
+  name: string,
+  type: 'component' | 'directive' | 'filter'
+): string {
+  return `_${type}_${name.replace(/[^\w]/g, '_')}`
+}
+
 const propsHelperSet = new Set([NORMALIZE_PROPS, GUARD_REACTIVE_PROPS])
 
 function getUnnormalizedProps(
