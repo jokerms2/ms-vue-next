@@ -6,6 +6,8 @@ export {
 } from './errors'
 
 
+export * from './ast'
+
 export {
   transform,
   TransformContext,
